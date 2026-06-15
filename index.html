@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TutorIA Colombia - Ayuda Académica</title>
+    <style>
+        :root {
+            --primary: #0033A0; /* Azul Colombia */
+            --secondary: #CE1126; /* Rojo Colombia */
+            --light: #f4f7f6;
+            --dark: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            background-color: var(--primary);
+            color: white;
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background: white;
+            padding: 30px;
+            margin-top: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+        .level-selector, .subject-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn-level, .btn-subject {
+            background-color: #e0e0e0;
+            color: var(--dark);
+        }
+        .btn-level.active { background-color: var(--primary); color: white; }
+        .btn-subject.active { background-color: var(--secondary); color: white; }
+        
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            resize: vertical;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .btn-solve {
+            background-color: #28a745;
+            color: white;
+            font-size: 1.1em;
+            padding: 15px;
+            width: 100%;
+        }
+        .btn-solve:hover { background-color: #218838; }
+        
+        .btn-key {
+            background-color: #6c757d;
+            color: white;
+            font-size: 0.85em;
+            padding: 5px 10px;
+            margin-top: 10px;
+        }
+        .btn-key:hover { background-color: #5a6268; }
+
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-left: 5px solid var(--primary);
+            border-radius: 5px;
+            display: none;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>TutorIA Colombia</h1>
+        <p>Tu asistente paso a paso para Colegio (10° y 11°) and Universidad</p>
+    </header>
+
+    <div class="container">
+        <h3>1. ¿En qué nivel estás?</h3>
+        <div class="level-selector">
+            <button class="btn-level active" onclick="setLevel('colegio')">Colegio (10° y 11°)</button>
+            <button class="btn-level" onclick="setLevel('universidad')">Universidad</button>
+        </div>
+
+        <h3>2. Selecciona la materia</h3>
+        <div class="subject-selector" id="subject-container">
+            </div>
+
+        <h3>3. Ingresa tu tarea o ecuación</h3>
+        <div class="workspace">
+            <textarea id="problem-input" placeholder="Ejemplo: Resuelve la ecuación cuadrática 2x^2 + 4x - 6 = 0..."></textarea>
+            <button class="btn-solve" onclick="solveWithIA()">Resolver Paso a Paso</button>
+            <center><button class="btn-key" onclick="borrarYCambiarClave()">🔑 Configurar / Cambiar API Key</button></center>
+        </div>
+
+        <div class="result-box" id="result-container">
+            <h4>Solución Explicada:</h4>
+            <div id="solution-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // Limpiamos cualquier rastro extraño de claves anteriores
+        let API_KEY = localStorage.getItem("tutor_api_key") || ""; 
+
+        const subjects = {
+            colegio: ['Español', 'Matemáticas', 'Química', 'Física'],
+            universidad: ['Matemáticas', 'Álgebra', 'Física']
+        };
+
+        let currentLevel = 'colegio';
+        let currentSubject = 'Matemáticas';
+
+        function verificarClave() {
+            if (!API_KEY) {
+                const claveUsuario = prompt("Por favor, ingresa tu API Key de Google Gemini:");
+                if (claveUsuario && claveUsuario.trim() !== "") {
+                    // El .replace elimina espacios ocultos o saltos de línea molestos
+                    const claveLimpia = claveUsuario.trim().replace(/[\n\r\t]/g, "");
+                    localStorage.setItem("tutor_api_key", claveLimpia);
+                    API_KEY = claveLimpia;
+                    alert("¡API Key guardada con éxito!");
+                }
+            }
+        }
+
+        function borrarYCambiarClave() {
+            localStorage.removeItem("tutor_api_key");
+            API_KEY = "";
+            verificarClave();
+        }
+
+        function setLevel(level) {
+            currentLevel = level;
+            document.querySelectorAll('.btn-level').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            renderSubjects();
+        }
+
+        function setSubject(subject, event) {
+            currentSubject = subject;
+            document.querySelectorAll('.btn-subject').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function renderSubjects() {
+            const container = document.getElementById('subject-container');
+            container.innerHTML = '';
+            subjects[currentLevel].forEach((subj, index) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-subject ${index === 0 ? 'active' : ''}`;
+                btn.innerText = subj;
+                btn.onclick = (e) => setSubject(subj, e);
+                container.appendChild(btn);
+            });
+            currentSubject = subjects[currentLevel][0];
+        }
+
+        async function solveWithIA() {
+            if (!API_KEY) {
+                verificarClave();
+                if (!API_KEY) return; 
+            }
+
+            const input = document.getElementById('problem-input').value;
+            const resultContainer = document.getElementById('result-container');
+            const solutionContent = document.getElementById('solution-content');
+
+            if (!input.trim()) {
+                alert("Por favor, escribe un problema primero.");
+                return;
+            }
+
+            resultContainer.style.display = 'block';
+            solutionContent.innerHTML = "<p><em>Pensando, analizando y resolviendo tu ejercicio... ⏳</em></p>";
+
+            const promptFinal = `Eres un tutor académico experto en Colombia. El estudiante es de nivel ${currentLevel} y la materia es ${currentSubject}. Resuelve el siguiente problema de forma exacta, explicando detalladamente paso a paso cada procedimiento matemático, analítico o gramatical para que el estudiante aprenda cómo se hace. Muestra el resultado final de forma clara y visible al final. Problema: ${input}`;
+
+            // URL definitiva v1 oficial
+            const urlDefinitiva = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            
+            // Esto imprimirá la URL real en tu consola para verificar que no tenga v1beta
+            console.log("Conectando a:", urlDefinitiva);
+
+            try {
+                const response = await fetch(urlDefinitiva, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: promptFinal }]
+                        }]
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.candidates && data.candidates[0].content.parts[0].text) {
+                    let respuestaIA = data.candidates[0].content.parts[0].text;
+                    respuestaIA = respuestaIA.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    respuestaIA = respuestaIA.replace(/\n/g, '<br>');
+                    solutionContent.innerHTML = respuestaIA;
+                } else {
+                    console.error("Error de la API de Google:", data);
+                    solutionContent.innerHTML = "<p style='color:red;'>Error. Tu API Key podría estar mal copiada o Google rechazó la petición. Dale al botón gris de abajo para volverla a configurar.</p>";
+                }
+
+            } catch (error) {
+                solutionContent.innerHTML = "<p style='color:red;'>Error de conexión. Sube el archivo a GitHub Pages para saltar las restricciones del navegador.</p>";
+                console.error(error);
+            }
+        }
+
+        renderSubjects();
+    </script>
+</body>
+</html>
